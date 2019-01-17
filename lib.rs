@@ -60,7 +60,7 @@ fn new_with_ts_fn<F, W>(io : W, ts_f: F) -> slog_json::JsonBuilder<W>
 {
     slog_json::Json::new(io)
         .add_key_value(o!(
-            "pid" => nix::unistd::getpid() as usize,
+            "pid" => nix::unistd::getpid().as_raw(),
             "hostname" => get_hostname(),
             "time" => FnValue(ts_f),
             "level" => FnValue(|rinfo : &Record| {

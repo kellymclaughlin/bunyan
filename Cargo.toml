@@ -16,5 +16,5 @@ path = "lib.rs"
 [dependencies]
 slog = "2"
 slog-json = "2"
-nix = "0.8.0"
+nix = "0.13.0"
 chrono = "0.3.0"

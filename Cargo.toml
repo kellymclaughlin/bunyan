@@ -16,5 +16,8 @@ path = "lib.rs"
 [dependencies]
 slog = "2"
 slog-json = "2"
-nix = "0.8.0"
 chrono = "0.3.0"
+libc = "0.2.48"
+
+[target.'cfg(not(target_os = "solaris"))'.dependencies]
+nix = "0.13.0"

@@ -23,23 +23,55 @@
 
 #[macro_use]
 extern crate slog;
+extern crate libc;
+#[cfg(not(target_os = "solaris"))]
 extern crate nix;
 extern crate chrono;
 extern crate slog_json;
 
 use slog::{Record, Level, FnValue};
+use libc::pid_t;
 
 use std::io;
+#[cfg(target_os = "solaris")]
+use std::ffi::CStr;
 
+
+#[cfg(target_os = "solaris")]
+fn solaris_gethostname(buffer: &mut [u8]) -> &CStr {
+    let ptr = buffer.as_mut_ptr() as *mut libc::c_char;
+    let len = buffer.len() as libc::size_t;
+
+    unsafe { libc::gethostname(ptr, len) };
+    buffer[len - 1] = 0; // ensure always null-terminated
+    unsafe { CStr::from_ptr(buffer.as_ptr() as *const libc::c_char) }
+}
+
+#[cfg(target_os = "solaris")]
+fn getpid() -> pid_t {
+    unsafe { libc::getpid() }
+}
+
+#[cfg(not(target_os = "solaris"))]
+fn getpid() -> pid_t {
+    nix::unistd::getpid().as_raw()
+}
+
+#[cfg(target_os = "solaris")]
 fn get_hostname() -> String {
+    let mut buf = vec!(0u8; 256);
+    solaris_gethostname(&mut buf).to_string_lossy().into()
+}
 
+#[cfg(not(target_os = "solaris"))]
+fn get_hostname() -> String {
     let mut buf = vec!(0u8; 256);
     match nix::unistd::gethostname(&mut buf) {
         Ok(hostname_c) => {
             // TODO: BUG: use locale to known encoding?
             hostname_c.to_string_lossy().into()
-        }
-        Err(_) => "n/a".to_string(),
+        },
+        Err(_) => "n/a".to_string()
     }
 }
 
@@ -60,7 +92,7 @@ fn new_with_ts_fn<F, W>(io : W, ts_f: F) -> slog_json::JsonBuilder<W>
 {
     slog_json::Json::new(io)
         .add_key_value(o!(
-            "pid" => nix::unistd::getpid() as usize,
+            "pid" => getpid(),
             "hostname" => get_hostname(),
             "time" => FnValue(ts_f),
             "level" => FnValue(|rinfo : &Record| {
@@ -94,8 +126,8 @@ where
 mod test {
     use super::new_with_ts_fn;
     use super::get_hostname;
+    use super::getpid;
     use chrono::{TimeZone, UTC};
-    use nix;
     use slog::{Record, RecordStatic, RecordLocation};
     use slog::{Level, Drain, Logger};
     use std::sync::{Mutex, Arc};
@@ -137,6 +169,7 @@ mod test {
             log.log(&Record::new(&rs, &format_args!("message"), b!()));
         }
 
+        let pid = getpid().to_string();
         assert_eq!(String::from_utf8_lossy(&(*(*v).lock().unwrap())),
                    "{".to_string() +
                    "\"msg\":\"message\"," +
@@ -145,7 +178,7 @@ mod test {
                    "\"level\":30," +
                    "\"time\":\"2014-07-08T09:10:11+00:00\"," +
                    "\"hostname\":\"" + &get_hostname() + "\"," +
-                   "\"pid\":" + &nix::unistd::getpid().to_string() +
+                   "\"pid\":" + &pid +
                    "}\n");
     }
 }
